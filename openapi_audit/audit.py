@@ -18,7 +18,7 @@ import json
 import re
 import sys
 import tomllib
-from collections.abc import Callable, Iterator
+from collections.abc import Callable, Iterable, Iterator
 
 
 @dataclasses.dataclass(kw_only=True, frozen=True)
@@ -618,6 +618,10 @@ def print_result(ar: AuditResult, cfg: AuditConfig) -> None:
             print()
         else:
             print(f"[OK] {check_header}")
+
+
+def get_checks() -> Iterable[Check]:
+    return iter(_CHECKS)
 
 
 def main(argv: list[str] | None = None) -> None:
