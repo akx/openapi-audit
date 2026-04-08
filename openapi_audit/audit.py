@@ -43,6 +43,15 @@ class AuditConfig:
     ignore_regexps: dict[str, list[re.Pattern[str]]] = dataclasses.field(default_factory=dict)
 
 
+@dataclasses.dataclass(frozen=True)
+class AuditResult:
+    results: dict[str, list[Issue]]
+
+    @property
+    def has_issues(self) -> bool:
+        return bool(self.results)
+
+
 _CHECKERS: list[tuple[str, str, Callable[[dict], Iterator[IssueContent]]]] = []
 
 
@@ -50,6 +59,7 @@ def checker(*, id: str, description: str):
     def decorator(fn: Callable[[dict], Iterator[IssueContent]]) -> Callable[[dict], Iterator[IssueContent]]:
         _CHECKERS.append((id, description, fn))
         return fn
+
     return decorator
 
 
@@ -208,9 +218,7 @@ def _collect_refs(obj, refs: set[str]) -> None:
 def check_path_parameter_mismatch(schema: dict) -> Iterator[IssueContent]:
     for path, method, details in iter_operations(schema):
         template_params = set(re.findall(r"\{(\w+)\}", path))
-        declared_params = {
-            p["name"] for p in details.get("parameters", []) if p.get("in") == "path"
-        }
+        declared_params = {p["name"] for p in details.get("parameters", []) if p.get("in") == "path"}
         op_id = details.get("operationId", "?")
         loc = (method.upper(), path, f"[{op_id}]")
         for missing in sorted(template_params - declared_params):
@@ -284,10 +292,7 @@ def check_missing_tags(schema: dict) -> Iterator[IssueContent]:
 def check_missing_error_responses(schema: dict) -> Iterator[IssueContent]:
     for path, method, details in iter_operations(schema):
         responses = details.get("responses", {})
-        has_error = any(
-            str(code).startswith(("4", "5")) or code == "default"
-            for code in responses
-        )
+        has_error = any(str(code).startswith(("4", "5")) or code == "default" for code in responses)
         if not has_error:
             op_id = details.get("operationId", "?")
             yield IssueContent(location=(method.upper(), path, f"[{op_id}]"))
@@ -346,7 +351,11 @@ def check_opaque_schemas(schema: dict) -> Iterator[IssueContent]:
 
 
 def _has_example(obj: dict) -> bool:
-    return obj.get("example") is not None or obj.get("examples") is not None or obj.get("schema", {}).get("example") is not None
+    return (
+        obj.get("example") is not None
+        or obj.get("examples") is not None
+        or obj.get("schema", {}).get("example") is not None
+    )
 
 
 @checker(id="missing-parameter-example", description="Missing examples on parameters")
@@ -496,6 +505,13 @@ def load_config(path: str) -> dict:
     return config
 
 
+def _validate_check_ids(check_ids: set[str]) -> set[str]:
+    unknown = check_ids - set(ALL_CHECK_IDS)
+    if unknown:
+        raise ValueError(f"Unknown check IDs: {', '.join(sorted(unknown))}")
+    return check_ids
+
+
 def parse_config_regexps(config: dict) -> dict[str, list[re.Pattern[str]]]:
     result: dict[str, list[re.Pattern[str]]] = {}
     all_ids = set(ALL_CHECK_IDS)
@@ -524,12 +540,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def audit_schema(schema: dict, config: AuditConfig | None = None) -> dict[str, list[Issue]]:
+def audit_schema(schema: dict, config: AuditConfig | None = None) -> AuditResult:
     """Run all checks against a schema dict, returning {check_id: [issues]} for failed checks."""
     cfg = config or AuditConfig()
-    unknown = cfg.ignore - set(ALL_CHECK_IDS)
-    if unknown:
-        raise ValueError(f"Unknown check IDs: {', '.join(sorted(unknown))}")
+    _validate_check_ids(cfg.ignore)
     results: dict[str, list[Issue]] = {}
     for check_id, _title, check_fn in _CHECKERS:
         if check_id in cfg.ignore:
@@ -543,27 +557,42 @@ def audit_schema(schema: dict, config: AuditConfig | None = None) -> dict[str, l
             issues.append(issue)
         if issues:
             results[check_id] = issues
-    return results
+    return AuditResult(results=results)
 
 
 def resolve_config(args: argparse.Namespace) -> AuditConfig:
     ignored = set(args.ignore)
-    unknown = ignored - set(ALL_CHECK_IDS)
-    if unknown:
-        print(f"Unknown check IDs: {', '.join(sorted(unknown))}", file=sys.stderr)
+    try:
+        _validate_check_ids(ignored)
+        ignore_regexps: dict[str, list[re.Pattern[str]]] = {}
+        if args.config:
+            config = load_config(args.config)
+            ignore_regexps = parse_config_regexps(config)
+            ignored.update(config.get("ignore-checks", []))
+            _validate_check_ids(ignored)
+    except ValueError as exc:
+        print(exc, file=sys.stderr)
         print("Run with --list-checks to see available IDs.", file=sys.stderr)
         sys.exit(2)
-    ignore_regexps: dict[str, list[re.Pattern[str]]] = {}
-    if args.config:
-        config = load_config(args.config)
-        ignore_regexps = parse_config_regexps(config)
-        for check_id in config.get("ignore-checks", []):
-            ignored.add(check_id)
     return AuditConfig(ignore=ignored, ignore_regexps=ignore_regexps)
 
 
-def main():
-    args = parse_args()
+def print_result(ar: AuditResult, cfg: AuditConfig) -> None:
+    for check_id, title, _ in _CHECKERS:
+        if check_id in cfg.ignore:
+            print(f"[SKIP] {title}")
+        elif check_id in ar.results:
+            issues = ar.results[check_id]
+            print(f"[{len(issues)}] {title}:")
+            for issue in issues:
+                print(issue.format())
+            print()
+        else:
+            print(f"[OK] {title}")
+
+
+def main(argv: list[str] | None = None) -> None:
+    args = parse_args(argv)
 
     if args.list_checks:
         for check_id, title, _ in _CHECKERS:
@@ -582,21 +611,11 @@ def main():
     )
     print()
 
-    results = audit_schema(schema, cfg)
+    ar = audit_schema(schema, cfg)
 
-    for check_id, title, _ in _CHECKERS:
-        if check_id in cfg.ignore:
-            print(f"[SKIP] {title}")
-        elif check_id in results:
-            issues = results[check_id]
-            print(f"[{len(issues)}] {title}:")
-            for issue in issues:
-                print(issue.format())
-            print()
-        else:
-            print(f"[OK] {title}")
+    print_result(ar, cfg)
 
-    if results:
+    if ar.has_issues:
         sys.exit(1)
     else:
         print("\nNo issues found!")

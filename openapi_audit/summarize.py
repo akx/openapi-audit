@@ -188,10 +188,10 @@ def summarize_schema(schema: dict) -> str:
     return "\n".join(lines)
 
 
-def main():
+def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(description="Summarize an OpenAPI schema in a compact, LLM-friendly format.")
     parser.add_argument("schema_file", nargs="?", help="Path to OpenAPI JSON file (reads stdin if omitted)")
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
 
     if args.schema_file:
         with open(args.schema_file) as f:

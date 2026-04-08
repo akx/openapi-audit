@@ -15,12 +15,26 @@ openapi-summarize = "openapi_audit.summarize:main"
 
 [dependency-groups]
 dev = [
+    "pytest>=9.0.3",
+    "pytest-cov>=7.1.0",
     "ruff>=0.15.9",
     "ty>=0.0.29",
 ]
 
 [tool.hatch.version]
 path = "openapi_audit/__init__.py"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/LICENSE",
+    "/README.md",
+    "/openapi_audit",
+    "/pyproject.toml",
+    "/tests",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["openapi_audit"]
 
 [tool.ruff]
 preview = true
@@ -52,5 +66,25 @@ ignore = [
     "TRY003",
 ]
 
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = [
+    "ANN",
+    "C901",
+    "S101",
+    "T2",
+]
+
 [tool.ruff.lint.mccabe]
 max-complexity = 10
+
+
+[tool.coverage.report]
+exclude_also = [
+    "def __repr__",
+    "if self\\.debug",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if 0:",
+    "if __name__ == .__main__.:",
+    "@(abc\\.)?abstractmethod",
+]

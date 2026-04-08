@@ -1,0 +1,5 @@
+[tool.openapi-audit]
+ignore-checks = ["missing-parameter-example", "5xx-response"]
+
+[tool.openapi-audit.checks.missing-parameter-example]
+ignore-regexps = ["(limit|offset|ordering)"]
