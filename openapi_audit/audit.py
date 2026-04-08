@@ -180,6 +180,8 @@ def check_missing_response_schemas(schema: dict) -> Iterator[IssueContent]:
         for status_code, response in responses.items():
             if not status_code.startswith("2"):
                 continue
+            if not isinstance(response, dict):
+                continue
             content = response.get("content", {})
             if not content and not response.get("description"):
                 op_id = details.get("operationId", "?")

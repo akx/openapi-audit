@@ -1,0 +1,282 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "The Worst API Known To Humankind",
+    "version": "0.0.1-alpha-rc-nightly-SNAPSHOT",
+    "description": "A magnificently terrible API that violates every best practice simultaneously.\nDo not use this in production. Or staging. Or anywhere, really."
+  },
+  "tags": [
+    {"name": "cursed", "description": "Things that should not be"},
+    {"name": "forgotten", "description": "Nobody remembers adding this tag"},
+    {"name": "vestigial", "description": "Evolved past the need for endpoints"}
+  ],
+  "security": [
+    {"pastaAuth": []}
+  ],
+  "components": {
+    "securitySchemes": {
+      "pastaAuth": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Pasta-Token"
+      }
+    },
+    "schemas": {
+      "Vibes": {
+        "type": "object",
+        "description": "Just vibes, no structure"
+      },
+      "UnreferencedLegacyBlob": {
+        "type": "object",
+        "description": "Nobody uses this anymore but we are too scared to delete it",
+        "properties": {
+          "data": {
+            "type": "string"
+          },
+          "moreData": {
+            "type": "string"
+          }
+        }
+      },
+      "FeelingEnum": {
+        "type": "string",
+        "enum": []
+      },
+      "Mood": {
+        "type": "string",
+        "enum": ["happy", "sad", "confused", "existential-dread", "LGTM", "Friday"]
+      }
+    }
+  },
+  "paths": {
+    "/vibes": {
+      "get": {
+        "operationId": "getVibes",
+        "summary": "Get the vibes",
+        "tags": ["cursed"],
+        "parameters": [
+          {
+            "name": "intensity",
+            "in": "query",
+            "schema": {"type": "integer"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/xml": {
+                "schema": {"$ref": "#/components/schemas/Vibes"}
+              }
+            }
+          },
+          "500": {
+            "description": "The vibes are off"
+          }
+        }
+      },
+      "post": {
+        "operationId": "post_vibes",
+        "summary": "this summary does not start with uppercase and that is a stylistic crime",
+        "tags": ["cursed"],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {"$ref": "#/components/schemas/Vibes"}
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Created... with a 200 for some reason",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/Vibes"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/vibes/{vibeId}/aura/{auraId}": {
+      "get": {
+        "operationId": "getVibeAura",
+        "summary": "Get aura of a vibe",
+        "tags": ["cursed"],
+        "parameters": [
+          {
+            "name": "vibeId",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          },
+          {
+            "name": "phantomParam",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"},
+            "description": "Declares itself as path param, but the path does not contain it"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One aura, served lukewarm",
+            "content": {
+              "application/json": {
+                "schema": {"type": "object"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "/feelings/": {
+      "get": {
+        "operationId": "list-feelings",
+        "summary": "List all feelings\nNote: includes deprecated feelings",
+        "tags": ["undeclared-tag"],
+        "responses": {
+          "200": {
+            "description": "A list of feelings",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {"$ref": "#/components/schemas/Mood"}
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/feelings/{feelingId}": {
+      "get": {
+        "operationId": "list-feelings",
+        "summary": "Get a single feeling by ID (yes the operationId is duplicated, we know)",
+        "tags": ["undeclared-tag"],
+        "parameters": [
+          {
+            "name": "feelingId",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One feeling",
+            "content": {
+              "application/json": {
+                "schema": {"$ref": "#/components/schemas/Mood"}
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "operationId": "DeleteFeeling",
+        "summary": "Delete a feeling forever",
+        "tags": ["cursed"],
+        "parameters": [
+          {
+            "name": "feelingId",
+            "in": "path",
+            "required": true,
+            "schema": {"type": "string"}
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "The feeling has been obliterated (with a 200, not 204)"
+          }
+        }
+      }
+    },
+    "/coreapi-leftover": {
+      "get": {
+        "operationId": "coreapi_leftover_read",
+        "summary": "get:\ncoreapi-leftover",
+        "description": "post:\nthis was auto-generated by CoreAPI and never cleaned up",
+        "tags": ["cursed"],
+        "responses": {
+          "200": {}
+        }
+      },
+      "put": {
+        "operationId": "coreapi_leftover_update",
+        "summary": "Update the coreapi leftover",
+        "tags": ["cursed"],
+        "responses": {
+          "200": {
+            "description": "Updated"
+          }
+        }
+      }
+    },
+    "/black-hole": {
+      "post": {
+        "operationId": "postBlackHole",
+        "summary": "Send data into the void",
+        "tags": ["cursed"],
+        "requestBody": {
+          "content": {
+            "application/octet-stream": {
+              "schema": {"type": "string", "format": "binary"}
+            }
+          }
+        },
+        "responses": {
+          "202": {
+            "description": "Accepted into the void",
+            "content": {
+              "text/plain": {
+                "schema": {"type": "string"}
+              }
+            }
+          },
+          "503": {
+            "description": "The void is full"
+          }
+        }
+      }
+    },
+    "/cursed-responses": {
+      "get": {
+        "operationId": "getCursedResponses",
+        "summary": "Endpoint with responses that defy the spec",
+        "tags": ["cursed"],
+        "responses": {
+          "200": {
+            "description": "Somehow this works"
+          },
+          "204": {
+            "description": "No content, as intended for once"
+          },
+          "403": "this should be an object but someone put a string here",
+          "418": {
+            "description": "I am a teapot"
+          }
+        }
+      }
+    },
+    "/nowhere": {
+      "get": {
+        "operationId": "getNowhere",
+        "summary": "This endpoint references a schema that does not exist",
+        "tags": ["cursed"],
+        "responses": {
+          "200": {
+            "description": "You will never get this response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DoesNotExist"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
