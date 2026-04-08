@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import inspect
 import json
 import re
 import sys
@@ -41,6 +42,7 @@ class Issue(IssueContent):
 class AuditConfig:
     ignore: set[str] = dataclasses.field(default_factory=set)
     ignore_regexps: dict[str, list[re.Pattern[str]]] = dataclasses.field(default_factory=dict)
+    max_summary_length: int = 80
 
 
 @dataclasses.dataclass(frozen=True)
@@ -52,12 +54,34 @@ class AuditResult:
         return bool(self.results)
 
 
-_CHECKERS: list[tuple[str, str, Callable[[dict], Iterator[IssueContent]]]] = []
+@dataclasses.dataclass(frozen=True)
+class Check:
+    id: str
+    description: str
+    func: Callable[..., Iterator[IssueContent]]
+    accepts_config: bool
+
+    def run(self, schema: dict, config: AuditConfig) -> Iterator[Issue]:
+        ic_iterator = self.func(schema, config=config) if self.accepts_config else self.func(schema)
+        for ic in ic_iterator:
+            yield Issue(id=self.id, location=ic.location, message=ic.message)
+
+
+CheckerFn = Callable[..., Iterator[IssueContent]]
+
+
+_CHECKS: list[Check] = []
 
 
 def checker(*, id: str, description: str):
-    def decorator(fn: Callable[[dict], Iterator[IssueContent]]) -> Callable[[dict], Iterator[IssueContent]]:
-        _CHECKERS.append((id, description, fn))
+    def decorator(fn: CheckerFn) -> CheckerFn:
+        check = Check(
+            id=id,
+            description=description,
+            func=fn,
+            accepts_config=("config" in inspect.signature(fn).parameters),
+        )
+        _CHECKS.append(check)
         return fn
 
     return decorator
@@ -116,13 +140,13 @@ def check_missing_summaries(schema: dict) -> Iterator[IssueContent]:
 
 
 @checker(id="verbose-summary", description="Verbose or malformed summaries")
-def check_verbose_summaries(schema: dict, max_length: int = 80) -> Iterator[IssueContent]:
+def check_verbose_summaries(schema: dict, *, config: AuditConfig) -> Iterator[IssueContent]:
     for path, method, details in iter_operations(schema):
         summary = details.get("summary", "")
         if not summary:
             continue
         problems = []
-        if len(summary) > max_length:
+        if len(summary) > config.max_summary_length:
             problems.append(f"too long ({len(summary)} chars)")
         if "\n" in summary:
             problems.append("contains newlines")
@@ -492,7 +516,7 @@ def _get_referenced_schemes(schema: dict) -> set[str]:
     return referenced
 
 
-ALL_CHECK_IDS = [check_id for check_id, _, _ in _CHECKERS]
+ALL_CHECK_IDS = {c.id for c in _CHECKS}
 
 
 def load_config(path: str) -> dict:
@@ -545,58 +569,61 @@ def audit_schema(schema: dict, config: AuditConfig | None = None) -> AuditResult
     cfg = config or AuditConfig()
     _validate_check_ids(cfg.ignore)
     results: dict[str, list[Issue]] = {}
-    for check_id, _title, check_fn in _CHECKERS:
-        if check_id in cfg.ignore:
+    for check in _CHECKS:
+        if check.id in cfg.ignore:
             continue
         issues: list[Issue] = []
-        patterns = cfg.ignore_regexps.get(check_id, [])
-        for ic in check_fn(schema):
-            issue = Issue(id=check_id, location=ic.location, message=ic.message)
+        patterns = cfg.ignore_regexps.get(check.id, [])
+        for issue in check.run(schema, config=cfg):
             if patterns and any(p.search(issue.format()) for p in patterns):
                 continue
             issues.append(issue)
         if issues:
-            results[check_id] = issues
+            results[check.id] = issues
     return AuditResult(results=results)
 
 
 def resolve_config(args: argparse.Namespace) -> AuditConfig:
     ignored = set(args.ignore)
+    kwargs = {}
+    ignore_regexps: dict[str, list[re.Pattern[str]]] = {}
     try:
         _validate_check_ids(ignored)
-        ignore_regexps: dict[str, list[re.Pattern[str]]] = {}
         if args.config:
             config = load_config(args.config)
             ignore_regexps = parse_config_regexps(config)
             ignored.update(config.get("ignore-checks", []))
             _validate_check_ids(ignored)
+            if (msl := config.get("max-summary-length")) is not None:
+                kwargs["max_summary_length"] = int(msl)
     except ValueError as exc:
         print(exc, file=sys.stderr)
         print("Run with --list-checks to see available IDs.", file=sys.stderr)
         sys.exit(2)
-    return AuditConfig(ignore=ignored, ignore_regexps=ignore_regexps)
+    return AuditConfig(ignore=ignored, ignore_regexps=ignore_regexps, **kwargs)
 
 
 def print_result(ar: AuditResult, cfg: AuditConfig) -> None:
-    for check_id, title, _ in _CHECKERS:
-        if check_id in cfg.ignore:
-            print(f"[SKIP] {title}")
-        elif check_id in ar.results:
-            issues = ar.results[check_id]
-            print(f"[{len(issues)}] {title}:")
+    for check in _CHECKS:
+        check_header = f"{check.description} ({check.id})"
+        if check.id in cfg.ignore:
+            print(f"[SKIP] {check_header}")
+        elif check.id in ar.results:
+            issues = ar.results[check.id]
+            print(f"[{len(issues)}] {check_header}:")
             for issue in issues:
                 print(issue.format())
             print()
         else:
-            print(f"[OK] {title}")
+            print(f"[OK] {check_header}")
 
 
 def main(argv: list[str] | None = None) -> None:
     args = parse_args(argv)
 
     if args.list_checks:
-        for check_id, title, _ in _CHECKERS:
-            print(f"  {check_id:30s} {title}")
+        for check in _CHECKS:
+            print(f"  {check.id:30s} {check.description}")
         return
 
     cfg = resolve_config(args)
